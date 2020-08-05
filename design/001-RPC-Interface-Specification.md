@@ -31,7 +31,8 @@ The node shall provide three sets of APIs:
 APIs should be provided:
 
     1. Get config
-    2. Help
+    2. Open Session
+    3. Help
 
 2. Session APIs - For session related functionality. Each request will include
 a Session ID. Following APIs should be provided:
@@ -106,7 +107,25 @@ Returns the configuration parameters of the node.
 
 * `Node config`: (list of configurable parameters is yet to be defined)
 
-#### 2. Help
+#### 2. Open Session
+
+Open a new session for the given user with the specified configuration file.
+
+*Parameters*
+
+* `Config File`: [String] Path to the config file for the session. This should
+   present on a file system path accesible by the node.
+
+*Return*
+
+* `Session ID`: [String] Unique ID of the session.
+* `Success`: [Boolean]
+
+*Errors*
+
+* `Session already exists`
+
+#### 3. Help
 
 Returns the help message.
 
