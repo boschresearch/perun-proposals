@@ -36,21 +36,27 @@ APIs should be provided:
 
 2. Session APIs - For session related functionality. Each request will include
 a Session ID. Following APIs should be provided:
-    1. Add contact
-    2. Get contacts
-    3. Open payment channel
-    4. Get payment channels
-    5. Subscribe to payment channel requests
-    6. Respond to payment channel request
+
+    1. Add Contact
+    2. Get Contacts
+    3. Open Payment Channel
+    4. Get Payment Channels
+    5. Subscribe to Payment Channel Requests
+    6. Cancel Subscription To Payment Channel Requests
+    7. Respond to Payment Channel Request
+    8. Close Session
 
 3. Channel APIS - For channel related functionality. Each request will include
 a Session ID and Channel ID.
-    1. Send payment
-    2. Request payment
-    3. Subscribe to payment channel updates
-    4. Respond to payment channel update
-    5. Get balance
-    6. Close channel
+
+    1. Send Payment
+    2. Subscribe to Payment Channel Updates
+    3. Cancel Subscription To Payment Channel Updates
+    4. Respond to Payment Channel Update
+    5. Get Balance
+    6. Close Channel
+    7. Subscribe To Channel Close
+    8. Cancel Subscription To Channel Close
 
 ### Data formats
 
@@ -201,7 +207,7 @@ for off-chain transactions.
 
 *Return*
 
-* `Open channels`: [List of channel]
+* `Open channels`: [List of Channel]
 
 *Errors*
 
@@ -212,6 +218,7 @@ for off-chain transactions.
 Subscribe to notifications on new incoming payment channel requests.  A
 subscription id will be returned immediately and it will be included in the
 notification sent to the user on incoming payment channel requests. 
+All pending notifications, not yet timed out will be delivered to the client.
 
 *Parameters*
 
@@ -228,21 +235,41 @@ notification sent to the user on incoming payment channel requests.
 *Notification* Each notification sent to the user should contain the
 following data:
 
+* `ProposalID`: [String] Unique ID of this proposal.
 * `Proposing Peer`: [Peer] If the peer is missing in the contacts of the user,
   `Peer Alias` field will be empty string.
 * `Initial Channel State`: [Channel] Initial state of the proposed channel.
 
-#### 6. Respond To Payment Channel Request
+#### 6. Cancel Subscription To Payment Channel Requests
+
+Cancel the subscription for payment channel requests corresponding to the
+specified subscription ID.
+
+*Parameters*
+
+* `Session ID`: [String] Unique ID of the session.
+* `Subscription ID`: [String] This id will be included in the notifications.
+
+*Return*
+
+* `Success`: [bool]
+
+*Errors*
+
+* `Unknown Session ID`
+* `Unknown Subscription ID`
+
+#### 7. Respond To Payment Channel Request
 
 Respond to a payment channel request.
 
 *Parameters*
 
 * `Session ID`: [String] Unique ID of the session.
-* `Channel ID`: [String] Unique ID of the channel.
+* `ProposalID`: [String] Unique ID of this proposal.
 * `Subscription ID`:[String] Subscription in which the channel request was
   received.
-* `Response`:[String] This value should either be `Accept` or `Decline`.
+* `Response`:[Bool] True if Accept, False if Reject.
 
 *Return*
 
@@ -253,12 +280,34 @@ Respond to a payment channel request.
 * `Unknown Session ID`
 * `Unknown Channel ID`
 * `Unknown Subscription ID`
+* `Peer Not Responding`
+
+#### 8. Close Session
+
+Close the specified session. All session data are persisted to disk.
+If Persiste Open Channels is true, returns success = false if there are open channels.
+If it is false, persists all the open channel data to disk and closes the session.
+
+*Parameters*
+
+* `Session ID`: [String]
+* `Persist Open Channels`: [bool]
+
+*Return*
+
+* `Success`: [bool]
+* `Open Channels`: [List of Channels]
+
+*Errors*
+
+* `Unknown Session ID`
 
 ### Channel
 
 #### 1. Send Payment
 
 Send a payment to the specified peer on the channel.
+Using negative value in amount to request payment from the user.
 
 *Parameters*
 
@@ -278,34 +327,12 @@ Send a payment to the specified peer on the channel.
 * `Unknown Channel ID`
 * `Peer Not Responding`
 
-#### 2. Request Payment
-
-Request a payment from the specified peer on the channel.
-
-*Parameters*
-
-* `Session ID`: [String]
-* `Channel ID`: [String]
-* `Peer Alias`: [String] Alias of the peer from which amount should be
-  requested.
-* `Amount`: [String] Amount can be specified in currency string format (as
-  specified in data formats section).
-
-*Return*
-
-* `Updated Channel Balance`: [Balance Info]
-
-*Errors*
-
-* `Unknown Session ID`
-* `Unknown Channel ID`
-* `Peer Not Responding`
-
-#### 3. Subscribe To Payment Channel Update
+#### 2. Subscribe To Payment Channel Updates
 
 Subscribe to notifications on new incoming payment channel updates.  A
 subscription id will be returned immediately and it will be included in the
 notification sent to the user on incoming payment channel updates.
+All pending notifications, not yet timed out will be delivered to the client.
 
 *Parameters*
 
@@ -327,6 +354,29 @@ following data:
 * `Proposing Peer`: [Peer] If the peer is missing in the contacts of the user,
   `Peer Alias` field will be empty string.
 * `Proposed Balance`: [Balance Info]
+* `Version`: [String] New version for the proposed channel.
+* `IsClosingUpdate`: [bool]
+
+#### 3. Cancel Subscription To Payment Channel Updates
+
+Cancel the subscription for payment channel updates corresponding to the
+specified subscription ID.
+
+*Parameters*
+
+* `Session ID`: [String] Unique ID of the session.
+* `Channel ID`: [String] Unique ID of the channel.
+* `Subscription ID`: [String] This id will be included in the notifications.
+
+*Return*
+
+* `Success`: [bool]
+
+*Errors*
+
+* `Unknown Session ID`
+* `Unknown Channel ID`
+* `Unknown Subscription ID`
 
 #### 4. Respond To Payment Channel Update
 
@@ -338,7 +388,8 @@ Respond to a payment channel request.
 * `Channel ID`: [String]
 * `Subscription ID`:[String] Subscription in which the channel request was
   received.
-* `Response`:[String] This value should either be `Accept` or `Decline`.
+* `Version`: [String] Version for the proposed channel.
+* `Response`:[Bool] True if Accept, False if Reject.
 
 *Return*
 
@@ -348,6 +399,9 @@ Respond to a payment channel request.
 
 * `Unknown Session ID`
 * `Unknown Channel ID`
+* `Unknown Subscription ID`
+* `Unknown Version`
+* `Peer Not Responding`
 
 #### 5. Get Balances
 
@@ -367,7 +421,7 @@ Get balance for the specified payment channel.
 * `Unknown Session ID`
 * `Unknown Channel ID`
 
-#### 6. Close
+#### 6. Close Channel
 
 Close the specified payment channel.
 
@@ -384,6 +438,53 @@ Close the specified payment channel.
 
 * `Unknown Session ID`
 * `Unknown Channel ID`
+
+#### 7. Subscribe To Channel Close
+
+Subscribe to notifications on channels that are closed by the peer. User need
+not respond to these notifications. If the channel was already closed by peer
+before making this subscription, it will be delivered to the client as
+notification.
+
+*Parameters*
+
+* `Session ID`: [String] Unique ID of the session.
+* `Channel ID`: [String] Unique ID of the channel.
+
+*Return*
+
+* `Subscription ID`: [String] This id will be included in the notifications.
+
+*Errors*
+
+* `Unknown Session ID`
+* `Unknown Channel ID`
+
+*Notification* Each notification sent to the user should contain the
+following data:
+
+* `Final Channel Balance`: [List of Balance Info]
+
+#### 8. Cancel Subscription To Channel Close
+
+Cancel the subscription for channel close events corresponding to the
+specified subscription ID.
+
+*Parameters*
+
+* `Session ID`: [String] Unique ID of the session.
+* `Channel ID`: [String] Unique ID of the channel.
+* `Subscription ID`: [String] This id will be included in the notifications.
+
+*Return*
+
+* `Success`: [bool]
+
+*Errors*
+
+* `Unknown Session ID`
+* `Unknown Channel ID`
+* `Unknown Subscription ID`
 
 ## Rationale
 
