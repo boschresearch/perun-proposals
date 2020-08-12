@@ -44,7 +44,9 @@ a Session ID. Following APIs should be provided:
     5. Subscribe to Payment Channel Requests
     6. Cancel Subscription To Payment Channel Requests
     7. Respond to Payment Channel Request
-    8. Close Session
+    7. Subscribe To Channel Close
+    8. Cancel Subscription To Channel Close
+    9. Close Session
 
 3. Channel APIS - For channel related functionality. Each request will include
 a Session ID and Channel ID.
@@ -55,8 +57,6 @@ a Session ID and Channel ID.
     4. Respond to Payment Channel Update
     5. Get Balance
     6. Close Channel
-    7. Subscribe To Channel Close
-    8. Cancel Subscription To Channel Close
 
 ### Data formats
 
@@ -186,6 +186,7 @@ Open a payment channel with the peer with the specified initial balance.
 * `Session ID`: [String] Unique ID of the session.
 * `Peer Alias`: [String] Alias of the peer with whom channel is to be opened.
 * `Initial Channel Balance`: [Balance Info]
+* `Challenge Duration`: [uint64] Challenge Duration for channel in seconds.
 
 *Return*
 
@@ -226,11 +227,12 @@ All pending notifications, not yet timed out will be delivered to the client.
 
 *Return*
 
-* `Subscription ID`: [String] This id will be included in the notifications.
+* `Success`: [bool]
 
 *Errors*
 
 * `Unknown Session ID`
+* `Subscription Already Exists`
 
 *Notification* Each notification sent to the user should contain the
 following data:
@@ -239,6 +241,7 @@ following data:
 * `Proposing Peer`: [Peer] If the peer is missing in the contacts of the user,
   `Peer Alias` field will be empty string.
 * `Initial Channel State`: [Channel] Initial state of the proposed channel.
+* `Challenge Duration`: [uint64] Challenge Duration for channel in seconds.
 
 #### 6. Cancel Subscription To Payment Channel Requests
 
@@ -248,7 +251,6 @@ specified subscription ID.
 *Parameters*
 
 * `Session ID`: [String] Unique ID of the session.
-* `Subscription ID`: [String] This id will be included in the notifications.
 
 *Return*
 
@@ -258,6 +260,7 @@ specified subscription ID.
 
 * `Unknown Session ID`
 * `Unknown Subscription ID`
+* `No Active Subscription`
 
 #### 7. Respond To Payment Channel Request
 
@@ -282,7 +285,55 @@ Respond to a payment channel request.
 * `Unknown Subscription ID`
 * `Peer Not Responding`
 
-#### 8. Close Session
+#### 7. Subscribe To Channel Close
+
+Subscribe to notifications on channels that are closed by the peer. User need
+not respond to these notifications. If the channel was already closed by peer
+before making this subscription, it will be delivered to the client as
+notification.
+
+*Parameters*
+
+* `Session ID`: [String] Unique ID of the session.
+* `Channel ID`: [String] Unique ID of the channel.
+
+*Return*
+
+* `Success`: [bool]
+
+*Errors*
+
+* `Unknown Session ID`
+* `Unknown Channel ID`
+* `Subscription Already Exists`
+
+*Notification* Each notification sent to the user should contain the
+following data:
+
+* `Final Channel Balance`: [List of Balance Info]
+
+#### 8. Cancel Subscription To Channel Close
+
+Cancel the subscription for channel close events corresponding to the
+specified subscription ID.
+
+*Parameters*
+
+* `Session ID`: [String] Unique ID of the session.
+* `Channel ID`: [String] Unique ID of the channel.
+
+*Return*
+
+* `Success`: [bool]
+
+*Errors*
+
+* `Unknown Session ID`
+* `Unknown Channel ID`
+* `No Active Subscription`
+
+
+#### 9. Close Session
 
 Close the specified session. All session data are persisted to disk.
 If Persiste Open Channels is true, returns success = false if there are open channels.
@@ -319,7 +370,7 @@ Using negative value in amount to request payment from the user.
 
 *Return*
 
-* `Updated Channel Balance`: [Balance Info]
+* `Success`: [bool]
 
 *Errors*
 
@@ -341,12 +392,14 @@ All pending notifications, not yet timed out will be delivered to the client.
 
 *Return*
 
-* `Subscription ID`: [String] This id will be included in the notifications.
+* `Success`: [bool] This id will be included in the notifications.
 
 *Errors*
 
 * `Unknown Session ID`
 * `Unknown Channel ID`
+* `Subscription Already Exists`
+
 
 *Notification* Each notification sent to the user should contain the
 following data:
@@ -366,7 +419,6 @@ specified subscription ID.
 
 * `Session ID`: [String] Unique ID of the session.
 * `Channel ID`: [String] Unique ID of the channel.
-* `Subscription ID`: [String] This id will be included in the notifications.
 
 *Return*
 
@@ -376,7 +428,7 @@ specified subscription ID.
 
 * `Unknown Session ID`
 * `Unknown Channel ID`
-* `Unknown Subscription ID`
+* `No Active Subscription`
 
 #### 4. Respond To Payment Channel Update
 
@@ -439,53 +491,6 @@ Close the specified payment channel.
 * `Unknown Session ID`
 * `Unknown Channel ID`
 
-#### 7. Subscribe To Channel Close
-
-Subscribe to notifications on channels that are closed by the peer. User need
-not respond to these notifications. If the channel was already closed by peer
-before making this subscription, it will be delivered to the client as
-notification.
-
-*Parameters*
-
-* `Session ID`: [String] Unique ID of the session.
-* `Channel ID`: [String] Unique ID of the channel.
-
-*Return*
-
-* `Subscription ID`: [String] This id will be included in the notifications.
-
-*Errors*
-
-* `Unknown Session ID`
-* `Unknown Channel ID`
-
-*Notification* Each notification sent to the user should contain the
-following data:
-
-* `Final Channel Balance`: [List of Balance Info]
-
-#### 8. Cancel Subscription To Channel Close
-
-Cancel the subscription for channel close events corresponding to the
-specified subscription ID.
-
-*Parameters*
-
-* `Session ID`: [String] Unique ID of the session.
-* `Channel ID`: [String] Unique ID of the channel.
-* `Subscription ID`: [String] This id will be included in the notifications.
-
-*Return*
-
-* `Success`: [bool]
-
-*Errors*
-
-* `Unknown Session ID`
-* `Unknown Channel ID`
-* `Unknown Subscription ID`
-
 ## Rationale
 
 <!-- Provide a discussion of alternative approaches and trade offs; advantages
@@ -510,5 +515,4 @@ or more existing features) --> <!-- New Feature (Introduces a functionality)
 <!-- Provide a description of the implementation aspects. -->
 
 Define protocol specific format definitions such as Protocol Buffers for gRPC
-and create an issue for implementing an protocol agnostic abstract User API
-layer according to this spec.
+and implement a protocol agnostic abstract User API layer according to this spec.
