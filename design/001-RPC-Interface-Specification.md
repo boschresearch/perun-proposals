@@ -1,11 +1,11 @@
 <!-- This is a template for proposing design changes to the dst-go project. -->
 
-# Proposal: Descriptive specification of the User API for Payment Channels
+# Proposal: Descriptive specification of the User API for Two Party Payment Channels
 
 * Author(s): Manoranjith
 * Status: propose
 * Related issue:
-  [dst-go#45](https://github.com/direct-state-transfer/dst-go/issues/45)
+  [perun-node#45](https://github.com/hyperledger-labs/perun-node/issues/45)
 
 <!-- Use the above format for issues on GitHub and full links for issues on
 other platforms. -->
@@ -15,91 +15,88 @@ other platforms. -->
 <!-- Provide a tl;dr summary -->
 
 This specification describes the different APIs that should be provided by the
-node for enabling the user to open and use payment channels.
+node for the user to open, use and close two party payment channels.
 
 ## Motivation
 
-To have a standardized definition of the API interface, which can be used to
-derive protocol specific format specifications like Protocol Buffers (for gRPC)
+To have a common specification of the API interface, which can be used to
+derive protocol specific formal specifications like Protocol Buffers (for gRPC)
 or JSON Schema for JSON RPC.
 
 ## Details
 
 The node shall provide three sets of APIs:
 
-1. Node APIs - For accessing node related functionality of the node. Following
-APIs should be provided:
+1. Node APIs - For accessing the node related functionality. Following APIs
+   should be provided:
 
     1. Get config
     2. Open Session
-    3. Help
+    3. Time
+    4. Help
 
-2. Session APIs - For session related functionality. Each request will include
-a Session ID. Following APIs should be provided:
+2. Session APIs - For accessing the session related functionality. Each request
+   should include a Session ID. Following APIs should be provided:
 
     1. Add Contact
-    2. Get Contacts
-    3. Open Payment Channel
-    4. Get Payment Channels
-    5. Subscribe to Payment Channel Requests
-    6. Cancel Subscription To Payment Channel Requests
-    7. Respond to Payment Channel Request
-    7. Subscribe To Channel Close
-    8. Cancel Subscription To Channel Close
+    2. Get Contact
+    3. Open Channel
+    4. Get Channels
+    5. Subscribe To Channel Requests
+    6. Unsubscribe To Channel Requests
+    7. Respond To Channel Request
+    7. Subscribe To Channel Closes
+    8. Unsubscribe To Channel Closes
     9. Close Session
 
-3. Channel APIS - For channel related functionality. Each request will include
-a Session ID and Channel ID.
+3. Channel APIS - For accessing the channel related functionality. Each request
+   should include a Session ID and Channel ID.
 
-    1. Send Payment
-    2. Subscribe to Payment Channel Updates
-    3. Cancel Subscription To Payment Channel Updates
-    4. Respond to Payment Channel Update
+    1. Send Channel Update
+    2. Subscribe To Channel Updates
+    3. Unsubscribe To Channel Updates
+    4. Respond To Channel Update
     5. Get Balance
     6. Close Channel
 
 ### Data formats
 
-The following 4 data formats will be used in the API description.
+The following 3 data formats will be used in the APIs.
 
 1. `Peer`
 
-    * `PeerAlias`: [String] Alias for the peer. It is a value set by the user to
-  reference the peer during API calls.
-    * `Perun ID`: [String] Permanent Identity of the peer in the off-chain
-  network.
-    * `Network Address`: [String] Network address for off-communications.
-    * `Protocol Versions`: [String] Perun protocol versions supported by the
-    peer.
+    * `Alias`: [String] Alias for the peer. This will be used to reference a
+      peer in all API calls.
+    * `Off-Chain Address`: [String] Permanent address (cryptographic) of the
+      peer in the off-chain network.
+    * `Comm Address`: [String] Address (network) of the peer for off-chain
+      communication.
+    * `Comm Type`: [String] Type of communication protocol supported by the
+      peer for off-chain communication.
 
 2. `Balance Info`
 
-    * `Currency`: [String] Currency used in the balance.
-    * List of `Alias`, `Balance` pairs, where
-      * `Alias`: [String] Alias of the peer represented in the channel. `Self` is
-        a special alias used for the user of the node.
-      * `Balance`: [String] Balance of the peer.
+    * `Currency`: [String] Currency used for specifying the amount.
+    * `Balance`: [Map of `Alias` to `Balance`] 
+      * `Alias`: [String] `Self` is a special alias for the user of the node.
+      * `Balance`: [String] Amount held by the `Peer` corresponding to the Alias.
 
-3. `Currency String`: The balance of can be specified in currency string format
-  as show below. The letters used that can used in the currency string is
-determined by the value of currency field.
-
-    * 2e50c for currency "Euro" that represents 2 euros and 50 cents and,
-    * 2e50w for currency "Ethereum" that represents 2 ethers and 50 wei.
-
-4. `Channel`
+3. `Payment Channel`
 
     * `Channel ID`: [String] Unique ID of the channel.
-    * `Channel Balance`: [Balance Info]
-    * `Version`: [Integer] Current Version of the channel.
+    * `Balance`: [Balance Info]
+    * `Version`: [int64] Current Version of the channel.
 
 The following error messages will be used in the API description.
 
 1. `Unknown Session ID`: No session corresponding to the specified ID.
-2. `Unknown Channel ID`: No channel corresponding to the specified ID.
-3. `Unknown Subscription ID`: No subscription corresponding to the specified ID.
-4. `Peer Exists`: A contact entry exits for the given peer and cannot be
-5. `Peer Not Responding`: Peer did not respond within expected time period.
+2. `Unknown Alias`: No entry in contacts for the given alias.
+3. `Unknown Proposal ID`
+4. `Unknown Channel ID`: No channel corresponding to the specified ID.
+5. `Peer Alias Not Available`: Given alias exists used for another Peer.
+6. `Peer Exists`: A contact entry for the given peer already exists.
+7. `Peer Not Responding`: Peer did not respond within expected time period.
+8. `Invalid Configuration`: Invalid configuration detected.
 
 ### Node
 
@@ -111,7 +108,16 @@ Returns the configuration parameters of the node.
 
 *Return*
 
-* `Node config`: (list of configurable parameters is yet to be defined)
+* `Chain Address`: [String] Address of the default blockchain node used by the
+  perun node.
+* `Adjudicator Address`: [String] Address of the default Adjudicator contract
+  used by the perun node.
+* `Asset Address`: [String] Address of the default Asset Holder contract used
+  by the perun node.
+* `Comm Types`: [List of String] Communication protocols supported by the node
+  for off-chain communication.
+* `Contact Types`: [List of String] Contacts Provider backends supported by the
+  node.
 
 #### 2. Open Session
 
@@ -120,16 +126,27 @@ Open a new session for the given user with the specified configuration file.
 *Parameters*
 
 * `Config File`: [String] Path to the config file for the session. This should
-   present on a file system path accesible by the node.
+   be present on a file system path accessible by the node.
 
 *Return*
 
 * `Session ID`: [String] Unique ID of the session.
-* `Success`: [Boolean]
 
 *Errors*
 
-* `Session already exists`
+* `Invalid Configuration`
+* `Session Initialization Error`
+
+#### 3. Time
+
+Returns the time as per perun node's clock in unix format. This time should be used
+to check if the timeout in a notification has expired or not.
+
+*Parameters* none
+
+*Return*
+
+* `Time`: [int64] Time in unix format.
 
 #### 3. Help
 
@@ -139,7 +156,7 @@ Returns the help message.
 
 *Return*
 
-* `Help Message`: list of available commands.
+* `APIs`: [String] List of available APIs.
 
 ### Session
 
@@ -150,7 +167,7 @@ Add a peer to the contacts in the specified session.
 *Parameters*
 
 * `Session ID`: [String] Unique ID of the session.
-* `Contact`: [Peer] Details of peer to be added to contacts.
+* `Peer`: [Peer] Peer to be added to the contacts.
 
 *Return*
 
@@ -160,47 +177,56 @@ Add a peer to the contacts in the specified session.
 
 * `Unknown Session ID`
 * `Peer Exists`
+* `Peer Alias Not Available`
+* `Invalid Off-Chain Address`
 
-#### 2. Get Contacts
+#### 2. Get Contact
 
-Get the contacts list of the user in the specified session.
+Get the peer corresponding to the given alias from the contacts in the
+specified session.
 
 *Parameters*
 
 * `Session ID`: [String] Unique ID of the session.
+* `Alias`: [String] Alias of the peer whose details should be retrieved.
 
 *Return*
 
-* `Contacts`: [List of Peer]
+* `Peer`: [Peer] Peer retrieved from contacts.
 
 *Errors*
 
 * `Unknown Session ID`
+* `Unknown Alias`
 
 #### 3. Open Payment Channel
 
-Open a payment channel with the peer with the specified initial balance.
+Open a payment channel with the peer (corresponding to the `Alias`) with the
+specified opening balance.
 
 *Parameters*
 
 * `Session ID`: [String] Unique ID of the session.
-* `Peer Alias`: [String] Alias of the peer with whom channel is to be opened.
-* `Initial Channel Balance`: [Balance Info]
-* `Challenge Duration`: [uint64] Challenge Duration for channel in seconds.
+* `Alias`: [String] Alias of the peer with whom channel is to be opened.
+* `Opening Balance`: [Balance Info]
+* `Challenge Duration`: [uint64] Challenge Duration for the channel in seconds.
 
 *Return*
 
-* `Success`: [Boolean]
+* `Channel`: [Payment Channel]
 
 *Errors*
 
 * `Unknown Session ID`
+* `Unknown Alias`
+* `Invalid Balance`
 * `Peer Not Responding`
+* `Peer Rejected`
 
 #### 4. Get Payment Channels
 
-Get the list of all payment channels in the specified session, that are open
-for off-chain transactions.
+Get the list of all payment channels that are open for off-chain transactions
+in the specified session.
 
 *Parameters*
 
@@ -208,18 +234,34 @@ for off-chain transactions.
 
 *Return*
 
-* `Open channels`: [List of Channel]
+* `Open channels`: [List of Payment Channel]
 
 *Errors*
 
 * `Unknown Session ID`
 
-#### 5. Subscribe To Payment Channel Requests
+#### 5. Subscribe To Channel Requests
 
-Subscribe to notifications on new incoming payment channel requests.  A
-subscription id will be returned immediately and it will be included in the
-notification sent to the user on incoming payment channel requests. 
-All pending notifications, not yet timed out will be delivered to the client.
+Subscribe to notifications on new incoming channel requests in the specified
+session.
+
+Only one subscription can be made at a time. Making a repeated subscription
+without canceling the previous one will return an error.
+
+The incoming channel requests received when there was no subscription will have
+been cached by the node. Once a new subscription is made, node will send these
+cached requests (if any), as individual notifications. It will then continue to
+send a notification for each new incoming channel request.
+
+Response to the notifications can be sent using the `Respond To Channel
+Request` API before the `timeout` expires.
+
+If the notification was received from a `Peer` that is not found in the
+contacts provider of the session, the request will be automatically rejected by
+the node. User will still receive a notification of this request with
+`Proposing Peer` field set to empty string and these notifications should not
+be responded to. If the user still responds to it, an `Unknown Proposal ID`
+error will be returned. 
 
 *Parameters*
 
@@ -234,19 +276,21 @@ All pending notifications, not yet timed out will be delivered to the client.
 * `Unknown Session ID`
 * `Subscription Already Exists`
 
-*Notification* Each notification sent to the user should contain the
-following data:
+*Notification*
 
-* `ProposalID`: [String] Unique ID of this proposal.
-* `Proposing Peer`: [Peer] If the peer is missing in the contacts of the user,
-  `Peer Alias` field will be empty string.
-* `Initial Channel State`: [Channel] Initial state of the proposed channel.
-* `Challenge Duration`: [uint64] Challenge Duration for channel in seconds.
+Each notification sent to the user should contain the following data:
 
-#### 6. Cancel Subscription To Payment Channel Requests
+* `Session ID`: [String] Unique ID of the session.
+* `Proposal ID`: [String] Unique ID of this channel proposal.
+* `Alias`: [String] Alias of the peer who proposed the channel.
+* `Opening Balance`: [Balance Info]
+* `Challenge Duration`: [uint64] Challenge Duration for the channel in seconds.
+* `Timeout`: [int64] Time (in unix format) before which response should be sent.
 
-Cancel the subscription for payment channel requests corresponding to the
-specified subscription ID.
+#### 6. Unsubscribe To Channel Requests
+
+Unsubscribe to notifications on new incoming channel requests in the specified
+session.
 
 *Parameters*
 
@@ -259,20 +303,19 @@ specified subscription ID.
 *Errors*
 
 * `Unknown Session ID`
-* `Unknown Subscription ID`
 * `No Active Subscription`
 
-#### 7. Respond To Payment Channel Request
+#### 7. Respond To Channel Request
 
-Respond to a payment channel request.
+Respond to an incoming channel request for which a notification was received.
+Response should be sent before the timeout in the notification expires. Use the
+`Time` API to fetch current time of the perun node.
 
 *Parameters*
 
 * `Session ID`: [String] Unique ID of the session.
-* `ProposalID`: [String] Unique ID of this proposal.
-* `Subscription ID`:[String] Subscription in which the channel request was
-  received.
-* `Response`:[Bool] True if Accept, False if Reject.
+* `Proposal ID`: [String] Unique ID of this proposal as received in the notification.
+* `Accept`: [Bool] If True, the proposal will be accepted, else rejected.
 
 *Return*
 
@@ -282,20 +325,26 @@ Respond to a payment channel request.
 
 * `Unknown Session ID`
 * `Unknown Channel ID`
-* `Unknown Subscription ID`
+* `Unknown Proposal ID`
 * `Peer Not Responding`
+* `Response Timeout Expired`
 
-#### 7. Subscribe To Channel Close
+#### 7. Subscribe To Channel Closes
 
-Subscribe to notifications on channels that are closed by the peer. User need
-not respond to these notifications. If the channel was already closed by peer
-before making this subscription, it will be delivered to the client as
-notification.
+Subscribe to notifications when channels in the specified session are closed by
+the peer. User need not respond to these notifications. 
+
+Only one subscription can be made at a time. Making a repeated subscription
+request without canceling the previous one will return an error.
+
+The channel close events occurred when there was no subscription will have been
+cached by the node. Once a new subscription is made, node will send these
+cached events (if any), as individual notifications. It will then continue to
+send a notification for each channel closed by a peer. 
 
 *Parameters*
 
 * `Session ID`: [String] Unique ID of the session.
-* `Channel ID`: [String] Unique ID of the channel.
 
 *Return*
 
@@ -304,23 +353,22 @@ notification.
 *Errors*
 
 * `Unknown Session ID`
-* `Unknown Channel ID`
 * `Subscription Already Exists`
 
-*Notification* Each notification sent to the user should contain the
-following data:
+*Notification*
 
-* `Final Channel Balance`: [List of Balance Info]
+Each notification sent to the user should contain the following data:
 
-#### 8. Cancel Subscription To Channel Close
+* `Closing State`: [Payment Channel]
 
-Cancel the subscription for channel close events corresponding to the
-specified subscription ID.
+#### 8. Unsubscribe To Channel Closes
+
+Unsubscribe to notifications when channels in the specified session are closed
+by the peer. 
 
 *Parameters*
 
 * `Session ID`: [String] Unique ID of the session.
-* `Channel ID`: [String] Unique ID of the channel.
 
 *Return*
 
@@ -329,44 +377,48 @@ specified subscription ID.
 *Errors*
 
 * `Unknown Session ID`
-* `Unknown Channel ID`
 * `No Active Subscription`
 
 
 #### 9. Close Session
 
 Close the specified session. All session data are persisted to disk.
-If Persiste Open Channels is true, returns success = false if there are open channels.
-If it is false, persists all the open channel data to disk and closes the session.
+
+`Force` parameter determines what happens when there are unclosed channels in
+the session (in open, dispute or closing in progress state).
+  * If it is set to `False` the API returns an error when there are such
+    channels. This should be used by default.
+  * If `True`, the session is forcibly closed and the API returns list of
+   unclosed channels. Use this with caution.
 
 *Parameters*
 
-* `Session ID`: [String]
-* `Persist Open Channels`: [bool]
+* `Session ID`: [String] Unique ID of the session.
+* `Force`: [bool] Forcibly close the session.
 
 *Return*
 
-* `Success`: [bool]
-* `Open Channels`: [List of Channels]
+* `Unclosed Channels`: [List of Payment Channels] This is relevant only when
+  using `Force` = True.
 
 *Errors*
 
 * `Unknown Session ID`
+* `Unclosed Payment Channels Exist`
 
-### Channel
+### Payment Channel
 
 #### 1. Send Payment
 
-Send a payment to the specified peer on the channel.
-Using negative value in amount to request payment from the user.
+Send a payment to the specified peer on the channel. Use negative value in
+amount to request payment from the peer.
 
 *Parameters*
 
 * `Session ID`: [String] Unique ID of the session.
 * `Channel ID`: [String] Unique ID of the channel.
 * `Alias`: [String] Alias of the peer to which amount should be sent.
-* `Amount`: [String] Amount can be specified in currency string format (as
-  specified in data formats section).
+* `Amount`: [String] Amount to send. Use negative sign to request payments.
 
 *Return*
 
@@ -376,14 +428,25 @@ Using negative value in amount to request payment from the user.
 
 * `Unknown Session ID`
 * `Unknown Channel ID`
+* `Unknown Alias`
+* `Invalid Amount`
 * `Peer Not Responding`
 
-#### 2. Subscribe To Payment Channel Updates
+#### 2. Subscribe To Channel Updates
 
-Subscribe to notifications on new incoming payment channel updates.  A
-subscription id will be returned immediately and it will be included in the
-notification sent to the user on incoming payment channel updates.
-All pending notifications, not yet timed out will be delivered to the client.
+Subscribe to notifications on new incoming updates for the specified channel in
+the specified session.
+
+Only one subscription can be made at a time. Making a repeated subscription
+without canceling the previous one will return an error.
+
+The incoming channel updates received when there was no subscription will have
+been cached by the node. Once a new subscription is made, node will send these
+cached update (if any), as individual notifications. It will then continue to
+send a notification for each new incoming channel update.
+
+Response to the notifications can be sent using the `Respond To Channel
+Update` API. 
 
 *Parameters*
 
@@ -392,7 +455,7 @@ All pending notifications, not yet timed out will be delivered to the client.
 
 *Return*
 
-* `Success`: [bool] This id will be included in the notifications.
+* `Success`: [bool]
 
 *Errors*
 
@@ -401,19 +464,22 @@ All pending notifications, not yet timed out will be delivered to the client.
 * `Subscription Already Exists`
 
 
-*Notification* Each notification sent to the user should contain the
-following data:
+*Notification*
 
-* `Proposing Peer`: [Peer] If the peer is missing in the contacts of the user,
-  `Peer Alias` field will be empty string.
+Each notification sent to the user should contain the following data:
+
+* `Proposing Peer`: [String] Alias of the peer proposing the update. 
 * `Proposed Balance`: [Balance Info]
-* `Version`: [String] New version for the proposed channel.
-* `IsClosingUpdate`: [bool]
+* `Version`: [String] Version of the channel state for proposed update.
+* `Final`: [bool] Indicates if this is a final update. Accepted final updates
+  can be used to the closed without challenge period.
+* `Timeout`: [int64] Time (in unix format) before which response should be
+  sent.
 
-#### 3. Cancel Subscription To Payment Channel Updates
+#### 3. Unsubscribe To Channel Updates
 
-Cancel the subscription for payment channel updates corresponding to the
-specified subscription ID.
+Unsubscribe to notifications on new incoming updates for the specified channel
+in the specified session.
 
 *Parameters*
 
@@ -430,18 +496,18 @@ specified subscription ID.
 * `Unknown Channel ID`
 * `No Active Subscription`
 
-#### 4. Respond To Payment Channel Update
+#### 4. Respond To Channel Update
 
-Respond to a payment channel request.
+Respond to a channel update. Response should be sent before the timeout in the
+notification expires. Use the `Time` API to fetch current time of the perun
+node.
 
 *Parameters*
 
 * `Session ID`: [String]
 * `Channel ID`: [String]
-* `Subscription ID`:[String] Subscription in which the channel request was
-  received.
-* `Version`: [String] Version for the proposed channel.
-* `Response`:[Bool] True if Accept, False if Reject.
+* `Version`: [String] Version of the channel state received in the notification.
+* `Accept`: [Bool] If True, the update will be accepted, else rejected.
 
 *Return*
 
@@ -451,13 +517,13 @@ Respond to a payment channel request.
 
 * `Unknown Session ID`
 * `Unknown Channel ID`
-* `Unknown Subscription ID`
 * `Unknown Version`
 * `Peer Not Responding`
+* `Response Timeout Expired`
 
-#### 5. Get Balances
+#### 5. Get Balance
 
-Get balance for the specified payment channel.
+Get balance for the specified channel.
 
 *Parameters*
 
@@ -484,7 +550,7 @@ Close the specified payment channel.
 
 *Return*
 
-* `Final Channel Balance`: [List of Balance Info]
+* `Closing Balance`: [Balance Info]
 
 *Errors*
 
@@ -497,10 +563,10 @@ Close the specified payment channel.
 and disadvantages of the specified approach.  -->
 
 1. An alternate approach to defining a dedicated API for payment channel would
-be to define an API for generalized state channels that can also be used for
-payment channel.  But having a dedicated API makes improves the usability of
-the API for payment use cases. While it still allows another end point in the
-node to provide an API for generalized state channels.
+   be to define an API for generalized state channels that can also be used for
+   payment channel. But having a dedicated API improves the usability of the API
+   for payment use cases. While it still allows another end point in the node to
+   provide an API for generalized state channels.
 
 ## Impact
 
@@ -515,4 +581,5 @@ or more existing features) --> <!-- New Feature (Introduces a functionality)
 <!-- Provide a description of the implementation aspects. -->
 
 Define protocol specific format definitions such as Protocol Buffers for gRPC
-and implement a protocol agnostic abstract User API layer according to this spec.
+and implement a protocol agnostic abstract API layer according to this
+specification.
