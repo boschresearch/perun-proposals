@@ -110,6 +110,21 @@ size after serialization. While in case of list, the `Balance` list and
   states with different versions, channel will be settled according to the
   state with the highest version number.
 
+### Error codes
+
+Each error response returned by the node will contain the following fields:
+
+1. Error code: A 3 digit code to identify the error. First digit signifies the
+error type and the next two digits signify the particular error.
+2. Error Type
+3. Error message
+3. Additional Info
+
+The errors returned by the node can belong to one of the following 5 categories.
+Each category of requires different kind of error handling at the client side.
+The category of error can be 
+
+
 The following errors have specific meaning. Any other error should be returned
 as `Internal Error` with additional details in the error information field.
 
