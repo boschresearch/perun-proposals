@@ -3,7 +3,8 @@
 hide footbox
 
 participant "Main component" as main_component
-participant "Watching Component\nRemote orLocal" as watcher
+participant "Watching Component\nRemote or Local" as watcher
+participant "Blockchain" as blockchain
 
 group Funding
 
@@ -12,6 +13,8 @@ main_component -> main_component: Open Channel
 
 main_component -> watcher: Start Watching
 activate watcher
+watcher -> blockchain: Subscribe for\nchannel events
+activate blockchain
 
 end
 
@@ -27,22 +30,35 @@ end
 
 group Dispute
 
-watcher -> watcher: Received Registered Event
+blockchain -> watcher: State registered
 
 opt if state is not latest
+watcher -> main_component: Refutation started
 watcher -> watcher: Refute
-watcher -> main_component: Refuted
+watcher -> blockchain: Register latest state
+watcher <- blockchain: State registered
+
+watcher -> main_component: Refutation completed.
 note over main_component, watcher #LightGray
-If watcher has registered a state,
-alice can then initiate channel close.
+Refutation status (started/completed) ?
+Required to ensure settle call in main component
+does not interfere with refutation ?
 endnote
 end
+
+note over main_component, watcher #LightGray
+This notification is for 
+endnote
+watcher -> main_component: Adjudicator Event\n(Register)
+
 
 end
 
 
 group Close 
 main_component -> watcher: Stop watching
+watcher -> blockchain: Close channel subscription
+deactivate blockchain
 deactivate watcher
 main_component -> main_component: Close channel
 

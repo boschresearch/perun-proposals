@@ -3,7 +3,7 @@
 # Proposal: Watching service for IoT adoption
 
 * Author(s): Manoranjith
-* Status: accepted
+* Status: accept
 * Related issue: [perun-proposals#008](https://github.com/hyperledger-labs/perun-proposals/pull/008),
 
 
@@ -13,10 +13,12 @@
 
 <!-- Provide a tl;dr summary -->
 The high level requirements for adopting the perun-framework for IoT use cases
-was described in [perun-proposal#003](./003-IoT-Adoption.md). Detailed
-description of the functionality and design for implementing the watching
-component is proposed.
+was described in [perun-proposal#003](./003-IoT-Adoption.md). One of the
+components required for adoption is a watcher that can be run both locally and
+as remote service.
 
+This proposal presents a detailed description of functionalities of the watcher
+and its interfaces.
 
 ## Motivation
 
@@ -28,8 +30,8 @@ channel.
 
 However, it is desirable to run the watcher as a separate component for IoT use
 cases. Because, for the perun protocol to work, the watcher should be actively
-watching the blockchain for any states being registered and if an older state is
-registered, the watcher must immediately refute with the latest valid state.
+watching the blockchain for any states being registered and whenever an older
+state is registered, it must immediately refute with the latest valid state.
 Given the connectivity and power constraints of IoT devices, it might not be
 possible to meet these requirements if watching service is running on the IoT
 device.
@@ -43,8 +45,51 @@ as a remote service, a new design is proposed where, the watcher can run:
 
 <!-- Provide a detailed description of the proposal. -->
 
+### Overview of functionalities of the watcher.
+
+
+1. Watcher should be started as an independent component with its own account
+   for sending on-chain transactions.
+
+2. When a channel is opened, user will register the channel with the watcher.
+   After registering a channel, user will periodically update the latest
+   off-chain state of the channel.
+
+3. Once a channel is registered, watcher should monitor the blockchain for any
+   states of the channel being registered on the blockchain.
+
+4. If the state being registered is not the latest off-chain state known by the
+   watcher, it should react by registering the latest state on the blockchain.
+   Watcher will use its own account for sending this transaction.
+
+The functionalities described above are represented in the sequence diagram.
+
+![Interaction between the main component, watcher and blockchain](004/watcher.svg)
+
 This section describes the proposed design for watching component and the
 implementation hints are described in the last section of this proposal.
+
+### Description of interfaces of the watcher
+
+#### Interfaces for initiliazing the watcher
+
+```go
+type Watcher struct {...} 
+
+// NewWatcher for initializes the watcher.
+func NewWatcher(rs SubscriberRegister){...}
+
+// RegisterSubscriber interface provides functions for interating with
+// the blockchain:
+type SubscriberRegister {
+   // Subscribe to on-chain event for a given channel.
+	Subscribe(context.Context, *Params) (AdjudicatorSubscription, error)
+   // Register off-chain state of a channel on the blockchain.
+	Register(context.Context, RegisterReq) error
+}
+```
+
+#### Interfaces for using the watcher.
 
 In the proposed design, the watcher is started once per client instance, as
 opposed to one watcher per channel in the current design. Interfaces for

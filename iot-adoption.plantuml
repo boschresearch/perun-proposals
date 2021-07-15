@@ -1,0 +1,83 @@
+@startuml iot_adoption
+!pragma teoz true
+hide footbox
+
+participant blockchain
+participant "Alice\nFunding\ncomponent" as alice_funder
+participant "Alice\nWatching\ncomponent" as alice_watcher
+participant "Alice\nTransacting" as alice_transacting
+participant bob
+
+group Funding
+
+activate alice_transacting
+alice_transacting -> bob: Propose\ninitial state
+alice_transacting <- bob: agreed
+
+alice_transacting -> alice_funder: Fund
+& alice_funder -> blockchain: Fund
+
+alice_transacting -> alice_watcher: watch
+activate alice_watcher
+
+end
+
+group Transacting 
+
+alice_transacting <-> bob: off-chain transactions.
+
+opt Periodically
+alice_transacting -> alice_watcher: state
+end
+
+end
+
+group Dispute
+
+blockchain -> alice_watcher: Registered Event
+
+opt if state is not latest
+alice_watcher -> blockchain: Register
+alice_watcher -> alice_transacting: Registered
+note over alice_transacting, alice_watcher #LightGray
+If watcher has registered a state,
+alice can then initiate channel close.
+endnote
+end
+
+end
+
+
+group Close 
+
+alice_transacting -> alice_funder : Register, Conclude,\nConcludeFinal\nWithdraw
+& alice_funder -> blockchain: 
+
+alice_transacting -> alice_watcher: stop watching
+deactivate alice_watcher
+
+end
+
+' within the remote register and remote settlers, any subscription can
+' be made as there is access to actual adjudicator.
+
+' only to make explicit subscriptions (as in case of watcher, an explicit)
+' subscription method needs to be invoked.
+
+' So solution would be to split Adjdicator into
+' Registerer, Withdrawer, Progressor and AdjEventSubscriber interfaces.
+' Settling component will use the Registerer & Withdrawer.
+' Watching component will use the Registerer (that uses different wallet) and AdjEventSubscriber.
+' Progressor is not needed for payment applications.
+
+' In this case, it would be sufficient to do the above refactor,
+' separate out the watching component and then do RPC implementations for
+' Funder, Registerer and Withdrawer interfaces.
+' That would simply make it work !!!!
+' In the aspect of implementation, the same adjudicator can be passed,
+' As it already implements these interfaces.
+' Also, these points can be treated as places where the component interacts with the
+' blockchain.
+
+
+@enduml
