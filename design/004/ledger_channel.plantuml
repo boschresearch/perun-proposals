@@ -10,19 +10,67 @@ participant "Bob" as bob
 group Open
 
 
-' Make a proposal
+' Make a sub channel proposal
 ' ===============
 '
+' Differences compared to ledger channel proposal
+' -----------------------------------------------
+
+
+' 0. Parent channel ID
 ' 1. Challenge duration.
 ' 2. Nonce Share
 ' 3. App definition (nil for payment channels)
 ' 4. Initial data (nil when app def is nil)
 ' 5. Initial allocation (assets & balances for each asset for each participant)
 ' 6. Funding agreement (possibly different from initial balances)
-' 7. Proposer's off-chain address for this channel.
-' 8. Other participant's perun address.
 
 ' 10. Signatures are not yet made.
+'
+' Ledger channel proposal has: BaseChannelProposal + Participant addr + Peer addresses
+' Sub channel proposal has: BaseChannelProposal + Parent Channel ID.
+'                           Peer addresses are taken from the parent channel (all)
+'
+' For sub-channels, the parent channel is locked.
+'
+' State machine for the sub-channel is same as the state machine for the parent channel.
+' client.Channel object is also same, but the
+'                for ledger channel: parent is nil, for sub-channel it is not.
+'
+' Some update interceptop mechanism is used for filtering the updates on ledger channel
+' that denote funding and settlement.
+' This is also stored in client.Channel. Details on this to be explored.
+'
+' For sub-channels, if proposee (accepting the channel, then
+'    - Register update interceptor for funding transaction update on the parent channel.
+'    - That filter is registered such that, when a `ChannelUpdate` is received,
+'      - Sub-alloc SHOULD NOT BE contained in the state of the (parent) channel.
+'      - sub-alloc SHOULD BE contained in the state of the channel update.
+'      - sub-allocation should be matching the proposal info of sub-channel.
+'    - Update interceptor with the above filter is registered against the sub-channel id in
+'      in the parent channel.
+'
+'     - Look into client/update.go. The updates relating to funding/settling of sub/virtual chs
+'       are not passed on to the node. They are handled by client itself.
+'
+'    - For each incoming update on a parent channel,
+'      - The filter is run using update interceptors. if it returns true,
+'      - then update is passed on to respective handler.
+'      - For sub0channels it's update interceptor's handle update.
+'        - The update intereceptor on the parent, actually sends the update to ui.Update channel.
+'        - And waits for response on ui.response channel.
+'
+'      - ui.Accpet() will
+'        - Wait for update on ui.Update channel, call accept on the responsder.
+'          - send an empty struct to ui.response channel.
+'          - after update is accepted, interceptor is released
+'            - response (signalling) channel is closed.
+'            - intereceptor is deleted.
+'
+'
+' Additional validation for sub-channel:
+' 1. assets must be equal. (If sub-channel is needed for only part of assets in parent, set them to zero).
+' 2. parent channel balance for each participant for each channel must be >= that for sub-channel.
 
 alice -> bob: Send Channel Proposal
 
@@ -51,8 +99,8 @@ end note
 
 alice -> alice: Generate &\nsign initial state
 & bob -> bob: Generate &\nsign initial state
-alice -> bob: Initial state with\nalice signature
-alice <- bob: Initial state with\nbob signature
+alice -> bob: Alice signature\nover initial state
+alice <- bob: Bob signature\nover initial state
 bob -> bob: Store initial state \nwith all signatures.
 & alice -> alice: Store initial state\nwith all signatures.
 
@@ -60,9 +108,24 @@ bob -> bob: Store initial state \nwith all signatures.
 ' ==================================
 '
 ' 1. Call funder.Fund
+'
+' 2. For a sub-channel,
+'    a. Proposer:
+'       1. Send a channel update, where parents's bal -= sub ch's bal
+'       2. Add sub-allocation to parent channel
+'          - ID of the sub-channel and sum of balances for each asset is stored.
+'    b. Proposee:
+'       1. await sub-channel funding update on parent channel.
+'       2. and accept it.
+'
+'    How do these update intereceptors works ?       
 
+alt if Ledger Channel
 alice -> blockchain: Fund
 & bob -> blockchain: Fund
+else if Sub Channel
+alice -> bob: Update on parent channel\nthat adds a sub-channel.\nUpdate must be sent by proposer.
+alice <- bob: Accept/Reject (Update must be accepted by proposee).
 end
 
 group Transact
@@ -80,12 +143,31 @@ group Transact
 '    1. Actor index must be same as Signer index
 '    2. Sub-allocations should not be modified.
 
-alice -> alice: Generate an updated state (Allocation and/or Data)
+alice -> alice: Generate an updated state
+note over alice, bob #LightGray
+Normally, when updating a state, allocation and/or data is modified;
+and version number must be incremented.
+
+If any of the parties want to close the perun channel, then they could
+generate a final update by setting "isFinal" field to true.
+After this no off-chain transactions can be done.
+
+The final state can be used to settle the channel on the blockchain
+without waiting for a challenge duration to expire and
+with one (instead of the normally required two) on-chain transaction.
+endnote
 alice -> alice: Sign the updated state.
 alice -> bob: Updated state with\nalice signature, alice index.
 bob -> bob: Sign updated state
 bob -> bob: Store updated state \nwith all signatures.
-alice <- bob: Update state with bob signature.
+alice <- bob: Bob signature\nover the updated state.
+
+note over alice, bob #LightGray
+In a similar way, an off-chain transaction
+could be initiated by Bob as well.
+
+There can be any number of transactions.
+endnote
 
 end
 
@@ -95,6 +177,7 @@ end
 ' 1. Optionally, create a finalized state.
 
 group Register
+alt if Ledger Channel
 alt If state is Final
 alice -> blockchain: Register
 alice <- blockchain: State registered
@@ -103,10 +186,16 @@ else If state is Non-Final
 alice -> blockchain: ConcludeFinal
 alice <- blockchain: State concluded
 blockchain -> bob: State concluded
+else if Sub-channel
+note over alice, bob #LightGray
+Go to the parent channel and register it on the blockchain.
+endnote
+end
 end
 end
 
 group Settle
+alt if Ledger channel
 alt If state is Final
 alice -> blockchain: Withdraw
 alice <- blockchain: Withdrawn for alice
@@ -132,6 +221,30 @@ alice <- blockchain: Withdrawn for alice
 
 bob -> blockchain: Withdraw
 bob <- blockchain: Withdrawn for bob
+else if Sub Channel
+note over alice, bob #LightGray
+The channel state must be finalized before it can be settled.
+Else the parent channel must be disputed on the blockchain.
+endnote
+alice -> bob: Update on parent channel\nthat removes a sub-channel.\nUpdate must be sent by proposer.
+' An update interceptor (similar to the one used for fuding update on parent channel),
+' is registered when a final update was accepted.
+'
+' What if the final update was not send by the proposer ?
+' Because,
+'   - channel.withdrawSubChannelIntoParents is sending the update on parent channel for sub channel proposer
+'   - and waiting for the update for sub-channel proposee.
+'
+' The withdraw update for the parent channel,
+' 1. Adds sub-channel balances to the parent channel.
+' 2. Removes the sub-alloc from the balances of the parent channel.
+'
+' When there are open sub-channels, the channel cannot be concludedFinal on the blockchain.
+' So in node, when sending a finalizing update, should we also check locked == nil ?
+'
+alice <- bob: Accept/Reject (Update must be accepted by proposee).
+end
+end
 end
 
 @enduml

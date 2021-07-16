@@ -1,0 +1,156 @@
+@startuml ledger_channel
+!pragma teoz true
+hide footbox
+skinparam SequenceMessageAlign center
+
+participant "Alice" as alice
+participant "Blockchain" as blockchain
+participant "Bob" as bob
+
+group Open
+
+
+' Make a proposal
+' ===============
+'
+' 1. Challenge duration.
+' 2. Nonce Share
+' 3. App definition (nil for payment channels)
+' 4. Initial data (nil when app def is nil)
+' 5. Initial allocation (assets & balances for each asset for each participant)
+' 6. Funding agreement (possibly different from initial balances)
+' 7. Proposer's off-chain address for this channel.
+' 8. Other participant's perun address.
+
+' 10. Signatures are not yet made.
+
+alice -> bob: Send Channel Proposal
+
+' Accept a proposal
+' ================= 
+'
+' 1. Add nonce share.
+' 2. Add participant's off-chain address for this channel.
+' 
+' 3. No signatures are made.
+
+' Reject a proposal
+' =================
+
+alice <- bob: Accept/Reject
+
+note over alice, bob #LightGray
+If rejected, protocol stops here.
+end note
+
+' Generate initial state
+' ======================
+'
+' 1. The initial state exchange is same as any other channel update.
+' Atleast the message types are same. Details to be added later.
+
+alice -> alice: Generate &\nsign initial state
+& bob -> bob: Generate &\nsign initial state
+alice -> bob: Alice signature\nover initial state
+alice <- bob: Bob signature\nover initial state
+bob -> bob: Store initial state \nwith all signatures.
+& alice -> alice: Store initial state\nwith all signatures.
+
+' Fund the channel on the blockchain
+' ==================================
+'
+' 1. Call funder.Fund
+
+alice -> blockchain: Fund
+& bob -> blockchain: Fund
+end
+
+group Transact
+
+' Applying an update
+' ==================
+'
+' 1. Update allocation and/or data.
+'    - App def is given as read-only for interpretting data.
+'    - In normal updates, isFinal flag is always false.
+' 2. Increment version.
+'
+' 3. Update consists of ?
+' 4. Conditions
+'    1. Actor index must be same as Signer index
+'    2. Sub-allocations should not be modified.
+
+alice -> alice: Generate an updated state
+note over alice, bob #LightGray
+Normally, when updating a state, allocation and/or data is modified;
+and version number must be incremented.
+
+If any of the parties want to close the perun channel, then they could
+generate a final update by setting "isFinal" field to true.
+After this no off-chain transactions can be done.
+
+The final state can be used to settle the channel on the blockchain
+without waiting for a challenge duration to expire and
+with one (instead of the normally required two) on-chain transaction.
+endnote
+alice -> alice: Sign the updated state.
+alice -> bob: Updated state with\nalice signature, alice index.
+bob -> bob: Sign updated state
+bob -> bob: Store updated state \nwith all signatures.
+alice <- bob: Bob signature\nover the updated state.
+
+note over alice, bob #LightGray
+In a similar way, an off-chain transaction
+could be initiated by Bob as well.
+
+There can be any number of transactions.
+endnote
+
+end
+
+' Before registering
+' ==================
+'
+' 1. Optionally, create a finalized state.
+
+group Register
+alt If state is Final
+alice -> blockchain: Register
+alice <- blockchain: State registered
+blockchain -> bob: State registered
+else If state is Non-Final
+alice -> blockchain: ConcludeFinal
+alice <- blockchain: State concluded
+blockchain -> bob: State concluded
+end
+end
+
+group Settle
+alt If state is Final
+alice -> blockchain: Withdraw
+alice <- blockchain: Withdrawn for alice
+
+bob -> blockchain: Withdraw
+bob <- blockchain: Withdrawn for bob
+
+else If state is Non-Final
+alice -> alice: Wait until challenge\nduration expires
+
+alice -> blockchain: Conclude
+note over alice, bob #LightGray
+If alice does not call conclude in a
+reasonable amount of time (say two blocks),
+then bob can call it as well (if urgent).
+endnote
+
+alice <- blockchain: State concluded
+blockchain -> bob: State concluded
+
+alice -> blockchain: Withdraw
+alice <- blockchain: Withdrawn for alice
+
+bob -> blockchain: Withdraw
+bob <- blockchain: Withdrawn for bob
+end
+
+@enduml
